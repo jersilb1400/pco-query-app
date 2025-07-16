@@ -11,7 +11,8 @@
 		"global_fetch_strictly_public"
 	],
 	"assets": {
-		"directory": "./public"
+		"directory": "./public",
+		"binding": "ASSETS"
 	},
 	"observability": {
 		"enabled": true
