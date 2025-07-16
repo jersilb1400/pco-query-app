@@ -1210,10 +1210,17 @@ function showAlert(message, type) {
 
 // Initialize bulk update upload area
 function initializeBulkUpdateUploadArea() {
+    console.log('Initializing bulk update upload area...');
     const uploadArea = document.getElementById('bulkUpdateUploadArea');
     const fileInput = document.getElementById('bulkUpdateCsvFile');
 
-    if (!uploadArea || !fileInput) return;
+    console.log('Upload area found:', !!uploadArea);
+    console.log('File input found:', !!fileInput);
+
+    if (!uploadArea || !fileInput) {
+        console.error('Required elements not found for bulk update upload');
+        return;
+    }
 
     // Drag and drop events
     uploadArea.addEventListener('dragover', (e) => {
@@ -1236,7 +1243,10 @@ function initializeBulkUpdateUploadArea() {
 
     // File input change
     fileInput.addEventListener('change', (e) => {
+        console.log('File input change event triggered');
+        console.log('Files selected:', e.target.files.length);
         if (e.target.files.length > 0) {
+            console.log('Calling handleBulkUpdateFileUpload with file:', e.target.files[0].name);
             handleBulkUpdateFileUpload(e.target.files[0]);
         }
     });
@@ -1244,6 +1254,13 @@ function initializeBulkUpdateUploadArea() {
 
 // Handle bulk update file upload
 async function handleBulkUpdateFileUpload(file) {
+    console.log('Bulk update file upload started:', file.name, file.size);
+    
+    if (!file) {
+        showAlert('No file selected', 'danger');
+        return;
+    }
+    
     if (!file.name.toLowerCase().endsWith('.csv')) {
         showAlert('Please select a CSV file', 'danger');
         return;
@@ -1254,10 +1271,25 @@ async function handleBulkUpdateFileUpload(file) {
     hideElement('bulkUpdateResults');
 
     try {
+        console.log('Reading file content...');
         // Parse CSV on the frontend (like the regular upload)
         const text = await file.text();
+        console.log('File content length:', text.length);
+        
+        if (!text || text.trim().length === 0) {
+            throw new Error('File is empty');
+        }
+        
         const lines = text.split('\n');
+        console.log('Number of lines:', lines.length);
+        
+        if (lines.length < 2) {
+            throw new Error('CSV file must have at least a header row and one data row');
+        }
+        
         const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        console.log('Headers found:', headers);
+        
         const data = [];
         
         for (let i = 1; i < lines.length; i++) {
@@ -1271,12 +1303,15 @@ async function handleBulkUpdateFileUpload(file) {
             }
         }
         
+        console.log('Parsed data rows:', data.length);
+        
         window.bulkUpdateData = data;
         showBulkUpdatePreview(data, headers);
         showAlert(`Successfully uploaded ${data.length} records for bulk update`, 'success');
     } catch (error) {
         console.error('Bulk update upload error:', error);
-        showAlert('Error uploading file', 'danger');
+        const errorMessage = error.message || 'Error uploading file';
+        showAlert(`Upload failed: ${errorMessage}`, 'danger');
     } finally {
         hideLoading('bulkUpdateLoading');
     }
