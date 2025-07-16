@@ -1386,6 +1386,7 @@ async function processBulkUpdate() {
         return;
     }
 
+    console.log('Starting bulk update with data:', window.bulkUpdateData);
     showLoading('bulkUpdateLoading');
     hideElement('bulkUpdateResults');
 
@@ -1396,7 +1397,9 @@ async function processBulkUpdate() {
             body: JSON.stringify({ records: window.bulkUpdateData })
         });
 
+        console.log('Bulk update response status:', response.status);
         const result = await response.json();
+        console.log('Bulk update result:', result);
 
         if (result.success) {
             showBulkUpdateResults(result.results, result.summary);

@@ -305,7 +305,7 @@ class PCOAPI {
     return data.data || [];
   }
 
-  async updatePerson(personId: string, updateData: Record<string, any>): Promise<boolean> {
+  async updatePerson(personId: string, updateData: Record<string, any>): Promise<{ success: boolean; error?: string }> {
     const url = `${this.baseUrl}/people/${personId}`;
     const payload = {
       data: {
@@ -315,12 +315,30 @@ class PCOAPI {
       }
     };
 
-    const response = await this.makeRequest(url, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    });
+    try {
+      const response = await this.makeRequest(url, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
 
-    return response.ok;
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`PCO API update failed for person ${personId}:`, response.status, errorText);
+        return { 
+          success: false, 
+          error: `PCO API error (${response.status}): ${errorText}` 
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Exception updating person ${personId}:`, errorMessage);
+      return { 
+        success: false, 
+        error: `Exception: ${errorMessage}` 
+      };
+    }
   }
 }
 
@@ -617,15 +635,16 @@ export default {
               if (record['First Name']) updateData.first_name = record['First Name'];
               if (record['Last Name']) updateData.last_name = record['Last Name'];
               if (record['Membership']) updateData.membership = record['Membership'];
-              if (record['Grade']) updateData.grade = record['Grade'];
+              if (record['Grade']) updateData.grade = parseInt(record['Grade']) || record['Grade'];
               if (record['Status']) updateData.status = record['Status'];
               if (record['Birthdate']) updateData.birthdate = record['Birthdate'];
               if (record['Gender']) updateData.gender = record['Gender'];
               if (record['Medical Notes']) updateData.medical_notes = record['Medical Notes'];
 
-              const success = await pcoAPI.updatePerson(pcoId, updateData);
+              console.log(`Updating person ${pcoId} with data:`, updateData);
+              const result = await pcoAPI.updatePerson(pcoId, updateData);
               
-              if (success) {
+              if (result.success) {
                 results.push({
                   pcoId: pcoId,
                   name: `${record['First Name'] || ''} ${record['Last Name'] || ''}`.trim(),
@@ -637,11 +656,12 @@ export default {
                   pcoId: pcoId,
                   name: `${record['First Name'] || ''} ${record['Last Name'] || ''}`.trim(),
                   status: 'error',
-                  message: 'Update failed'
+                  message: result.error || 'Update failed'
                 });
               }
             } catch (error) {
               const errorMessage = error instanceof Error ? error.message : 'Update failed';
+              console.error(`Exception in bulk update for person ${pcoId}:`, error);
               results.push({
                 pcoId: pcoId,
                 name: `${record['First Name'] || ''} ${record['Last Name'] || ''}`.trim(),
