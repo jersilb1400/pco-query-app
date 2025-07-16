@@ -556,6 +556,12 @@ class PCOAPI {
     ].filter(phone => phone.number && phone.number.trim());
 
     for (const phone of phoneNumbers) {
+      // Skip test phone numbers
+      if (phone.number.includes('555') && phone.number.length <= 14) {
+        details.push(`${phone.location} phone skipped (test number: ${phone.number})`);
+        continue;
+      }
+
       const phoneResult = await this.createPhoneNumber(finalPersonId, {
         number: phone.number,
         location: phone.location,
@@ -575,6 +581,15 @@ class PCOAPI {
     ].filter(email => email.address && email.address.trim());
 
     for (const email of emails) {
+      // Skip emails with disallowed domains
+      const disallowedDomains = ['example.com', 'test.com', 'invalid.com'];
+      const emailDomain = email.address.split('@')[1]?.toLowerCase();
+      
+      if (disallowedDomains.includes(emailDomain)) {
+        details.push(`${email.location} email skipped (disallowed domain: ${emailDomain})`);
+        continue;
+      }
+
       const emailResult = await this.createEmail(finalPersonId, {
         address: email.address,
         location: email.location,
@@ -590,7 +605,7 @@ class PCOAPI {
     // Create address
     if (record['Home Address Street Line 1'] && record['Home Address City']) {
       const addressData = {
-        street: record['Home Address Street Line 1'],
+        address1: record['Home Address Street Line 1'],
         city: record['Home Address City'],
         state: record['Home Address State'] || '',
         zip: record['Home Address Zip Code'] || '',
@@ -860,8 +875,8 @@ export default {
               'Mobile Phone Number': '(555) 123-4567',
               'Home Phone Number': '(555) 987-6543',
               'Work Phone Number': '(555) 456-7890',
-              'Home Email': 'john.doe@example.com',
-              'Work Email': 'john.doe@work.com',
+              'Home Email': 'john.doe@gmail.com',
+              'Work Email': 'john.doe@company.com',
               'Home Address Street Line 1': '123 Main St',
               'Home Address City': 'Anytown',
               'Home Address State': 'TX',
@@ -891,7 +906,7 @@ export default {
               'Mobile Phone Number': '(555) 999-8888',
               'Home Phone Number': '',
               'Work Phone Number': '',
-              'Home Email': 'jane.smith@example.com',
+              'Home Email': 'jane.smith@gmail.com',
               'Work Email': '',
               'Home Address Street Line 1': '456 Oak Ave',
               'Home Address City': 'Somewhere',
