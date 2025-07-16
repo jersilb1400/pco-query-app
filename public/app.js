@@ -1313,21 +1313,27 @@ function showBulkUpdatePreview(data, columns) {
 // Download bulk update template
 async function downloadBulkUpdateTemplate() {
     try {
-        const response = await fetch('/download-bulk-update-template');
-        const result = await response.json();
-
-        if (result.success) {
-            // Trigger download
+        const response = await fetch('/api/download-template');
+        
+        if (response.ok) {
+            // Get the CSV content directly
+            const csvContent = await response.text();
+            
+            // Create blob and download
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
-            link.href = result.downloadUrl;
-            link.download = 'bulk-update-template.csv';
+            link.href = url;
+            link.download = 'pco-bulk-update-template.csv';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
             
             showAlert('Template downloaded successfully', 'success');
         } else {
-            showAlert(result.error || 'Error downloading template', 'danger');
+            const errorData = await response.json();
+            showAlert(errorData.error || 'Error downloading template', 'danger');
         }
     } catch (error) {
         console.error('Template download error:', error);
@@ -1346,17 +1352,10 @@ async function processBulkUpdate() {
     hideElement('bulkUpdateResults');
 
     try {
-        // Create a temporary CSV file for upload
-        const csvContent = convertToCSV(window.bulkUpdateData);
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const file = new File([blob], 'bulk-update.csv', { type: 'text/csv' });
-
-        const formData = new FormData();
-        formData.append('csvFile', file);
-
-        const response = await fetch('/bulk-update', {
+        const response = await fetch('/api/bulk-update', {
             method: 'POST',
-            body: formData
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records: window.bulkUpdateData })
         });
 
         const result = await response.json();
