@@ -1249,28 +1249,31 @@ async function handleBulkUpdateFileUpload(file) {
         return;
     }
 
-    const formData = new FormData();
-    formData.append('csvFile', file);
-
     showLoading('bulkUpdateLoading');
     hideElement('bulkUpdatePreview');
     hideElement('bulkUpdateResults');
 
     try {
-        const response = await fetch('/upload-csv', {
-            method: 'POST',
-            body: formData
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            window.bulkUpdateData = result.data;
-            showBulkUpdatePreview(result.data, result.columns);
-            showAlert(`Successfully uploaded ${result.count} records for bulk update`, 'success');
-        } else {
-            showAlert(result.error || 'Error uploading file', 'danger');
+        // Parse CSV on the frontend (like the regular upload)
+        const text = await file.text();
+        const lines = text.split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        const data = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+            if (lines[i].trim()) {
+                const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+                const row = {};
+                headers.forEach((header, index) => {
+                    row[header] = values[index] || '';
+                });
+                data.push(row);
+            }
         }
+        
+        window.bulkUpdateData = data;
+        showBulkUpdatePreview(data, headers);
+        showAlert(`Successfully uploaded ${data.length} records for bulk update`, 'success');
     } catch (error) {
         console.error('Bulk update upload error:', error);
         showAlert('Error uploading file', 'danger');

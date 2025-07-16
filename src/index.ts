@@ -651,7 +651,20 @@ export default {
             }
           }
 
-          return new Response(JSON.stringify({ success: true, results }), {
+          // Calculate summary
+          const total = results.length;
+          const successful = results.filter(r => r.status === 'success').length;
+          const errors = results.filter(r => r.status === 'error').length;
+
+          return new Response(JSON.stringify({ 
+            success: true, 
+            results,
+            summary: {
+              total,
+              successful,
+              errors
+            }
+          }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
         }
