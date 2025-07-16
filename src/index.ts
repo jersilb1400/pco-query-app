@@ -340,6 +340,86 @@ class PCOAPI {
       };
     }
   }
+
+  async createPerson(personData: Record<string, any>): Promise<{ success: boolean; personId?: string; error?: string }> {
+    const url = `${this.baseUrl}/people`;
+    const payload = {
+      data: {
+        type: 'Person',
+        attributes: personData
+      }
+    };
+
+    try {
+      const response = await this.makeRequest(url, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`PCO API create failed:`, response.status, errorText);
+        return { 
+          success: false, 
+          error: `PCO API error (${response.status}): ${errorText}` 
+        };
+      }
+
+      const responseData = await this.parseResponse<PCOApiResponse<PCOPerson>>(response);
+      const newPersonId = responseData.data?.id;
+      
+      return { 
+        success: true, 
+        personId: newPersonId 
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Exception creating person:`, errorMessage);
+      return { 
+        success: false, 
+        error: `Exception: ${errorMessage}` 
+      };
+    }
+  }
+
+  async upsertPerson(personId: string | null, personData: Record<string, any>): Promise<{ success: boolean; personId?: string; action: 'created' | 'updated'; error?: string }> {
+    // If no personId provided or it's empty/null, create new person
+    if (!personId || personId.trim() === '' || personId === 'N/A') {
+      console.log('Creating new person with data:', personData);
+      const result = await this.createPerson(personData);
+      return {
+        success: result.success,
+        personId: result.personId,
+        action: 'created',
+        error: result.error
+      };
+    }
+
+    // Check if person exists
+    const existingPerson = await this.getPersonById(personId);
+    
+    if (!existingPerson) {
+      // Person doesn't exist, create new one
+      console.log(`Person ${personId} not found, creating new person with data:`, personData);
+      const result = await this.createPerson(personData);
+      return {
+        success: result.success,
+        personId: result.personId,
+        action: 'created',
+        error: result.error
+      };
+    } else {
+      // Person exists, update them
+      console.log(`Person ${personId} found, updating with data:`, personData);
+      const result = await this.updatePerson(personId, personData);
+      return {
+        success: result.success,
+        personId: personId,
+        action: 'updated',
+        error: result.error
+      };
+    }
+  }
 }
 
 // CSV Utilities
@@ -592,6 +672,37 @@ export default {
               'Home Address City': 'Anytown',
               'Home Address State': 'TX',
               'Home Address Zip Code': '12345'
+            },
+            {
+              'Person ID': '',
+              'Name Prefix': 'Ms.',
+              'Given Name': 'Jane',
+              'First Name': 'Jane',
+              'Nickname': '',
+              'Middle Name': 'Elizabeth',
+              'Last Name': 'Smith',
+              'Name Suffix': '',
+              'Birthdate': '1985-08-22',
+              'Anniversary': '',
+              'Gender': 'Female',
+              'Grade': '',
+              'School': '',
+              'Medical Notes': '',
+              'Child': 'false',
+              'Marital Status': 'Single',
+              'Status': 'active',
+              'Membership': 'Attender',
+              'Inactive Reason': '',
+              'Inactive Date': '',
+              'Mobile Phone Number': '(555) 999-8888',
+              'Home Phone Number': '',
+              'Work Phone Number': '',
+              'Home Email': 'jane.smith@example.com',
+              'Work Email': '',
+              'Home Address Street Line 1': '456 Oak Ave',
+              'Home Address City': 'Somewhere',
+              'Home Address State': 'CA',
+              'Home Address Zip Code': '54321'
             }
           ];
 
@@ -618,55 +729,50 @@ export default {
 
           for (const record of body.records) {
             const pcoId = record['Person ID'];
-            if (!pcoId) {
-              results.push({
-                pcoId: 'N/A',
-                name: `${record['First Name'] || ''} ${record['Last Name'] || ''}`.trim(),
-                status: 'error',
-                message: 'Missing PCO ID'
-              });
-              continue;
-            }
+            const personName = `${record['First Name'] || ''} ${record['Last Name'] || ''}`.trim();
 
             try {
-              const updateData: Record<string, any> = {};
+              const personData: Record<string, any> = {};
               
               // Map CSV fields to PCO API fields
-              if (record['First Name']) updateData.first_name = record['First Name'];
-              if (record['Last Name']) updateData.last_name = record['Last Name'];
-              if (record['Membership']) updateData.membership = record['Membership'];
-              if (record['Grade']) updateData.grade = parseInt(record['Grade']) || record['Grade'];
-              if (record['Status']) updateData.status = record['Status'];
-              if (record['Birthdate']) updateData.birthdate = record['Birthdate'];
-              if (record['Gender']) updateData.gender = record['Gender'];
-              if (record['Medical Notes']) updateData.medical_notes = record['Medical Notes'];
+              if (record['First Name']) personData.first_name = record['First Name'];
+              if (record['Last Name']) personData.last_name = record['Last Name'];
+              if (record['Membership']) personData.membership = record['Membership'];
+              if (record['Grade']) personData.grade = parseInt(record['Grade']) || record['Grade'];
+              if (record['Status']) personData.status = record['Status'];
+              if (record['Birthdate']) personData.birthdate = record['Birthdate'];
+              if (record['Gender']) personData.gender = record['Gender'];
+              if (record['Medical Notes']) personData.medical_notes = record['Medical Notes'];
 
-              console.log(`Updating person ${pcoId} with data:`, updateData);
-              const result = await pcoAPI.updatePerson(pcoId, updateData);
+              console.log(`Processing person ${pcoId || 'NEW'} with data:`, personData);
+              const result = await pcoAPI.upsertPerson(pcoId, personData);
               
               if (result.success) {
                 results.push({
-                  pcoId: pcoId,
-                  name: `${record['First Name'] || ''} ${record['Last Name'] || ''}`.trim(),
+                  pcoId: result.personId || pcoId || 'NEW',
+                  name: personName,
                   status: 'success',
-                  message: 'Updated successfully'
+                  message: `${result.action === 'created' ? 'Created' : 'Updated'} successfully`,
+                  action: result.action
                 });
               } else {
                 results.push({
-                  pcoId: pcoId,
-                  name: `${record['First Name'] || ''} ${record['Last Name'] || ''}`.trim(),
+                  pcoId: pcoId || 'N/A',
+                  name: personName,
                   status: 'error',
-                  message: result.error || 'Update failed'
+                  message: result.error || 'Operation failed',
+                  action: 'failed'
                 });
               }
             } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : 'Update failed';
-              console.error(`Exception in bulk update for person ${pcoId}:`, error);
+              const errorMessage = error instanceof Error ? error.message : 'Operation failed';
+              console.error(`Exception in bulk upsert for person ${pcoId}:`, error);
               results.push({
-                pcoId: pcoId,
-                name: `${record['First Name'] || ''} ${record['Last Name'] || ''}`.trim(),
+                pcoId: pcoId || 'N/A',
+                name: personName,
                 status: 'error',
-                message: errorMessage
+                message: errorMessage,
+                action: 'failed'
               });
             }
           }
@@ -675,6 +781,8 @@ export default {
           const total = results.length;
           const successful = results.filter(r => r.status === 'success').length;
           const errors = results.filter(r => r.status === 'error').length;
+          const created = results.filter(r => r.action === 'created' && r.status === 'success').length;
+          const updated = results.filter(r => r.action === 'updated' && r.status === 'success').length;
 
           return new Response(JSON.stringify({ 
             success: true, 
@@ -682,7 +790,9 @@ export default {
             summary: {
               total,
               successful,
-              errors
+              errors,
+              created,
+              updated
             }
           }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }

@@ -1403,10 +1403,12 @@ async function processBulkUpdate() {
 
         if (result.success) {
             showBulkUpdateResults(result.results, result.summary);
-            showAlert(`Bulk update completed: ${result.summary.successful} successful, ${result.summary.errors} errors`, 
+            const createdText = result.summary.created > 0 ? `, ${result.summary.created} created` : '';
+            const updatedText = result.summary.updated > 0 ? `, ${result.summary.updated} updated` : '';
+            showAlert(`Bulk operation completed: ${result.summary.successful} successful${createdText}${updatedText}, ${result.summary.errors} errors`, 
                      result.summary.errors > 0 ? 'warning' : 'success');
         } else {
-            showAlert(result.error || 'Error processing bulk update', 'danger');
+            showAlert(result.error || 'Error processing bulk operation', 'danger');
         }
     } catch (error) {
         console.error('Bulk update error:', error);
@@ -1427,25 +1429,37 @@ function showBulkUpdateResults(results, summary) {
     // Show summary
     summaryDiv.innerHTML = `
         <div class="row mb-3">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <div class="stats-card">
                     <div class="stats-number">${summary.total}</div>
                     <div class="stats-label">Total Records</div>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <div class="stats-card">
                     <div class="stats-number text-success">${summary.successful}</div>
                     <div class="stats-label">Successful</div>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <div class="stats-card">
+                    <div class="stats-number text-info">${summary.created || 0}</div>
+                    <div class="stats-label">Created</div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="stats-card">
+                    <div class="stats-number text-warning">${summary.updated || 0}</div>
+                    <div class="stats-label">Updated</div>
+                </div>
+            </div>
+            <div class="col-md-2">
                 <div class="stats-card">
                     <div class="stats-number text-danger">${summary.errors}</div>
                     <div class="stats-label">Errors</div>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <div class="stats-card">
                     <div class="stats-number text-primary">${((summary.successful / summary.total) * 100).toFixed(1)}%</div>
                     <div class="stats-label">Success Rate</div>
@@ -1457,10 +1471,16 @@ function showBulkUpdateResults(results, summary) {
     // Show results table
     results.forEach(result => {
         const tr = document.createElement('tr');
+        const actionBadge = result.action ? 
+            `<span class="badge ${result.action === 'created' ? 'bg-info' : result.action === 'updated' ? 'bg-warning' : 'bg-secondary'} me-2">
+                ${result.action}
+            </span>` : '';
+        
         tr.innerHTML = `
             <td>${result.pcoId}</td>
             <td>${result.name}</td>
             <td>
+                ${actionBadge}
                 <span class="badge ${result.status === 'success' ? 'bg-success' : 'bg-danger'}">
                     ${result.status}
                 </span>
