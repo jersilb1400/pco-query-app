@@ -382,6 +382,111 @@ class PCOAPI {
     }
   }
 
+  async createPhoneNumber(personId: string, phoneData: Record<string, any>): Promise<{ success: boolean; error?: string }> {
+    const url = `${this.baseUrl}/people/${personId}/phone_numbers`;
+    const payload = {
+      data: {
+        type: 'PhoneNumber',
+        attributes: phoneData
+      }
+    };
+
+    try {
+      const response = await this.makeRequest(url, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`PCO API phone number create failed for person ${personId}:`, response.status, errorText);
+        return { 
+          success: false, 
+          error: `Phone number creation failed (${response.status}): ${errorText}` 
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Exception creating phone number for person ${personId}:`, errorMessage);
+      return { 
+        success: false, 
+        error: `Phone number exception: ${errorMessage}` 
+      };
+    }
+  }
+
+  async createEmail(personId: string, emailData: Record<string, any>): Promise<{ success: boolean; error?: string }> {
+    const url = `${this.baseUrl}/people/${personId}/emails`;
+    const payload = {
+      data: {
+        type: 'Email',
+        attributes: emailData
+      }
+    };
+
+    try {
+      const response = await this.makeRequest(url, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`PCO API email create failed for person ${personId}:`, response.status, errorText);
+        return { 
+          success: false, 
+          error: `Email creation failed (${response.status}): ${errorText}` 
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Exception creating email for person ${personId}:`, errorMessage);
+      return { 
+        success: false, 
+        error: `Email exception: ${errorMessage}` 
+      };
+    }
+  }
+
+  async createAddress(personId: string, addressData: Record<string, any>): Promise<{ success: boolean; error?: string }> {
+    const url = `${this.baseUrl}/people/${personId}/addresses`;
+    const payload = {
+      data: {
+        type: 'Address',
+        attributes: addressData
+      }
+    };
+
+    try {
+      const response = await this.makeRequest(url, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`PCO API address create failed for person ${personId}:`, response.status, errorText);
+        return { 
+          success: false, 
+          error: `Address creation failed (${response.status}): ${errorText}` 
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Exception creating address for person ${personId}:`, errorMessage);
+      return { 
+        success: false, 
+        error: `Address exception: ${errorMessage}` 
+      };
+    }
+  }
+
   async upsertPerson(personId: string | null, personData: Record<string, any>): Promise<{ success: boolean; personId?: string; action: 'created' | 'updated'; error?: string }> {
     // If no personId provided or it's empty/null, create new person
     if (!personId || personId.trim() === '' || personId === 'N/A') {
@@ -419,6 +524,95 @@ class PCOAPI {
         error: result.error
       };
     }
+  }
+
+  async upsertPersonWithDetails(personId: string | null, record: Record<string, any>): Promise<{ success: boolean; personId?: string; action: 'created' | 'updated'; error?: string; details?: string[] }> {
+    // Extract person data (basic attributes)
+    const personData: Record<string, any> = {};
+    if (record['First Name']) personData.first_name = record['First Name'];
+    if (record['Last Name']) personData.last_name = record['Last Name'];
+    if (record['Membership']) personData.membership = record['Membership'];
+    if (record['Grade']) personData.grade = parseInt(record['Grade']) || record['Grade'];
+    if (record['Status']) personData.status = record['Status'];
+    if (record['Birthdate']) personData.birthdate = record['Birthdate'];
+    if (record['Gender']) personData.gender = record['Gender'];
+    if (record['Medical Notes']) personData.medical_notes = record['Medical Notes'];
+
+    // First, create or update the person
+    const personResult = await this.upsertPerson(personId, personData);
+    
+    if (!personResult.success || !personResult.personId) {
+      return personResult;
+    }
+
+    const finalPersonId = personResult.personId;
+    const details: string[] = [];
+
+    // Create phone numbers
+    const phoneNumbers = [
+      { number: record['Mobile Phone Number'], location: 'Mobile', primary: true },
+      { number: record['Home Phone Number'], location: 'Home', primary: false },
+      { number: record['Work Phone Number'], location: 'Work', primary: false }
+    ].filter(phone => phone.number && phone.number.trim());
+
+    for (const phone of phoneNumbers) {
+      const phoneResult = await this.createPhoneNumber(finalPersonId, {
+        number: phone.number,
+        location: phone.location,
+        primary: phone.primary
+      });
+      if (phoneResult.success) {
+        details.push(`${phone.location} phone added`);
+      } else {
+        details.push(`${phone.location} phone failed: ${phoneResult.error}`);
+      }
+    }
+
+    // Create emails
+    const emails = [
+      { address: record['Home Email'], location: 'Home', primary: true },
+      { address: record['Work Email'], location: 'Work', primary: false }
+    ].filter(email => email.address && email.address.trim());
+
+    for (const email of emails) {
+      const emailResult = await this.createEmail(finalPersonId, {
+        address: email.address,
+        location: email.location,
+        primary: email.primary
+      });
+      if (emailResult.success) {
+        details.push(`${email.location} email added`);
+      } else {
+        details.push(`${email.location} email failed: ${emailResult.error}`);
+      }
+    }
+
+    // Create address
+    if (record['Home Address Street Line 1'] && record['Home Address City']) {
+      const addressData = {
+        street: record['Home Address Street Line 1'],
+        city: record['Home Address City'],
+        state: record['Home Address State'] || '',
+        zip: record['Home Address Zip Code'] || '',
+        country: 'US',
+        location: 'Home'
+      };
+
+      const addressResult = await this.createAddress(finalPersonId, addressData);
+      if (addressResult.success) {
+        details.push('Home address added');
+      } else {
+        details.push(`Address failed: ${addressResult.error}`);
+      }
+    }
+
+    return {
+      success: personResult.success,
+      personId: finalPersonId,
+      action: personResult.action,
+      error: personResult.error,
+      details: details
+    };
   }
 }
 
@@ -732,27 +926,18 @@ export default {
             const personName = `${record['First Name'] || ''} ${record['Last Name'] || ''}`.trim();
 
             try {
-              const personData: Record<string, any> = {};
-              
-              // Map CSV fields to PCO API fields
-              if (record['First Name']) personData.first_name = record['First Name'];
-              if (record['Last Name']) personData.last_name = record['Last Name'];
-              if (record['Membership']) personData.membership = record['Membership'];
-              if (record['Grade']) personData.grade = parseInt(record['Grade']) || record['Grade'];
-              if (record['Status']) personData.status = record['Status'];
-              if (record['Birthdate']) personData.birthdate = record['Birthdate'];
-              if (record['Gender']) personData.gender = record['Gender'];
-              if (record['Medical Notes']) personData.medical_notes = record['Medical Notes'];
-
-              console.log(`Processing person ${pcoId || 'NEW'} with data:`, personData);
-              const result = await pcoAPI.upsertPerson(pcoId, personData);
+              console.log(`Processing person ${pcoId || 'NEW'} with full record data:`, record);
+              const result = await pcoAPI.upsertPersonWithDetails(pcoId, record);
               
               if (result.success) {
+                const detailsText = result.details && result.details.length > 0 ? 
+                  ` (${result.details.join(', ')})` : '';
+                
                 results.push({
                   pcoId: result.personId || pcoId || 'NEW',
                   name: personName,
                   status: 'success',
-                  message: `${result.action === 'created' ? 'Created' : 'Updated'} successfully`,
+                  message: `${result.action === 'created' ? 'Created' : 'Updated'} successfully${detailsText}`,
                   action: result.action
                 });
               } else {
